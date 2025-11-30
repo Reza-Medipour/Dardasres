@@ -1,13 +1,21 @@
-const API_BASE_URL = 'http://103.75.196.71:9000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://103.75.196.71:9000';
+
+export interface MediaOutputs {
+  summary?: boolean;
+  headline?: boolean;
+  headline_short?: boolean;
+  transcript?: boolean;
+  srt_original?: boolean;
+  srt_translated?: boolean;
+  txt_translated?: boolean;
+  generated_image_openai?: boolean;
+  generated_image_fal?: boolean;
+  generated_video_veo?: boolean;
+}
 
 export interface ProcessMediaRequest {
-  file?: File;
-  url?: string;
-  include_summary?: boolean;
-  include_transcript?: boolean;
-  include_srt?: boolean;
-  include_image?: boolean;
-  include_video?: boolean;
+  url: string;
+  outputs: MediaOutputs;
 }
 
 export interface ProcessMediaResponse {
@@ -15,12 +23,12 @@ export interface ProcessMediaResponse {
   headline?: string;
   headline_short?: string;
   transcript?: string;
-  transcript_short?: string;
-  gt_translated?: string;
-  gt_translated_short?: string;
-  generated_image_url?: string;
-  generated_mp4_url?: string;
-  generated_video_webm?: string;
+  srt_original?: string;
+  srt_translated?: string;
+  txt_translated?: string;
+  generated_image_openai?: string;
+  generated_image_fal?: string;
+  generated_video_veo?: string;
 }
 
 export interface APIError {
@@ -35,36 +43,6 @@ export async function processMedia(
   request: ProcessMediaRequest,
   onProgress?: (progress: number) => void
 ): Promise<ProcessMediaResponse> {
-  const formData = new FormData();
-
-  if (request.file) {
-    formData.append('file', request.file);
-  }
-
-  if (request.url) {
-    formData.append('url', request.url);
-  }
-
-  if (request.include_summary) {
-    formData.append('include_summary', 'true');
-  }
-
-  if (request.include_transcript) {
-    formData.append('include_transcript', 'true');
-  }
-
-  if (request.include_srt) {
-    formData.append('include_srt', 'true');
-  }
-
-  if (request.include_image) {
-    formData.append('include_image', 'true');
-  }
-
-  if (request.include_video) {
-    formData.append('include_video', 'true');
-  }
-
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -104,7 +82,8 @@ export async function processMedia(
       reject(new Error('درخواست لغو شد'));
     });
 
-    xhr.open('POST', `${API_BASE_URL}/analyze/`);
-    xhr.send(formData);
+    xhr.open('POST', `${API_BASE_URL}/process-media/`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.send(JSON.stringify(request));
   });
 }

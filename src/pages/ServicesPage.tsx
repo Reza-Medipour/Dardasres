@@ -24,7 +24,7 @@ import { processMedia } from '../lib/api';
 import { ResultsModal } from '../components/ResultsModal';
 
 type Service = Database['public']['Tables']['services']['Row'];
-type ServiceType = 'transcription' | 'subtitle' | 'summary' | 'title' | 'image' | 'video';
+type ServiceType = 'summary' | 'headline' | 'headline_short' | 'transcript' | 'srt_original' | 'srt_translated' | 'txt_translated' | 'image_openai' | 'image_fal' | 'video_veo';
 
 interface ServicesPageProps {
   onNavigate: (page: string) => void;
@@ -37,6 +37,7 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
   const [linkInput, setLinkInput] = useState('');
   const [language, setLanguage] = useState('fa');
   const [selectedServices, setSelectedServices] = useState<ServiceType[]>([]);
+  const [videoUrl, setVideoUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
@@ -49,52 +50,84 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
 
   const serviceOptions = [
     {
-      id: 'transcription' as ServiceType,
-      label: 'متن کامل',
-      description: 'تبدیل صوت به متن کامل',
-      icon: FileText,
-      color: 'blue',
-      apiField: 'include_transcript'
-    },
-    {
-      id: 'subtitle' as ServiceType,
-      label: 'زیرنویس',
-      description: 'تولید فایل زیرنویس SRT',
-      icon: Subtitles,
-      color: 'purple',
-      apiField: 'include_srt'
-    },
-    {
       id: 'summary' as ServiceType,
       label: 'خلاصه',
       description: 'خلاصه‌سازی هوشمند محتوا',
       icon: Sparkles,
       color: 'amber',
-      apiField: 'include_summary'
+      apiField: 'summary'
     },
     {
-      id: 'title' as ServiceType,
-      label: 'عنوان',
-      description: 'تولید تیتر و عنوان',
+      id: 'headline' as ServiceType,
+      label: 'عنوان اصلی',
+      description: 'تولید عنوان کامل',
       icon: FileText,
       color: 'emerald',
-      apiField: 'include_summary'
+      apiField: 'headline'
     },
     {
-      id: 'image' as ServiceType,
-      label: 'تصویر',
-      description: 'تولید تصویر با AI',
+      id: 'headline_short' as ServiceType,
+      label: 'عنوان کوتاه',
+      description: 'تولید عنوان کوتاه',
+      icon: FileText,
+      color: 'teal',
+      apiField: 'headline_short'
+    },
+    {
+      id: 'transcript' as ServiceType,
+      label: 'متن کامل',
+      description: 'تبدیل صوت به متن',
+      icon: FileText,
+      color: 'blue',
+      apiField: 'transcript'
+    },
+    {
+      id: 'srt_original' as ServiceType,
+      label: 'زیرنویس اصلی',
+      description: 'فایل زیرنویس SRT',
+      icon: Subtitles,
+      color: 'purple',
+      apiField: 'srt_original'
+    },
+    {
+      id: 'srt_translated' as ServiceType,
+      label: 'زیرنویس ترجمه',
+      description: 'زیرنویس ترجمه شده',
+      icon: Subtitles,
+      color: 'indigo',
+      apiField: 'srt_translated'
+    },
+    {
+      id: 'txt_translated' as ServiceType,
+      label: 'متن ترجمه',
+      description: 'متن ترجمه شده',
+      icon: Languages,
+      color: 'cyan',
+      apiField: 'txt_translated'
+    },
+    {
+      id: 'image_openai' as ServiceType,
+      label: 'تصویر OpenAI',
+      description: 'تولید تصویر با OpenAI',
       icon: ImageIcon,
       color: 'rose',
-      apiField: 'include_image'
+      apiField: 'generated_image_openai'
     },
     {
-      id: 'video' as ServiceType,
-      label: 'ویدیو',
-      description: 'تولید ویدیو VEO',
+      id: 'image_fal' as ServiceType,
+      label: 'تصویر FAL',
+      description: 'تولید تصویر با FAL',
+      icon: ImageIcon,
+      color: 'pink',
+      apiField: 'generated_image_fal'
+    },
+    {
+      id: 'video_veo' as ServiceType,
+      label: 'ویدیو VEO',
+      description: 'تولید ویدیو با VEO',
       icon: Video,
       color: 'violet',
-      apiField: 'include_video'
+      apiField: 'generated_video_veo'
     },
   ];
 
@@ -212,13 +245,8 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
   const handleSubmit = async () => {
     if (!profile) return;
 
-    if (inputType === 'file' && !selectedFile) {
-      setError('لطفا یک فایل انتخاب کنید');
-      return;
-    }
-
     if (inputType === 'link' && !linkInput.trim()) {
-      setError('لطفا لینک را وارد کنید');
+      setError('لطفا لینک ویدیو را وارد کنید');
       return;
     }
 
@@ -232,7 +260,13 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
     setUploadProgress(0);
 
     try {
-      const fileSizeMB = selectedFile ? selectedFile.size / (1024 * 1024) : 0;
+      const outputs: any = {};
+      selectedServices.forEach((serviceType) => {
+        const option = serviceOptions.find((s) => s.id === serviceType);
+        if (option?.apiField) {
+          outputs[option.apiField] = true;
+        }
+      });
 
       const { data: serviceRecord, error: dbError } = await supabase
         .from('services')
@@ -240,10 +274,11 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
           user_id: profile.id,
           service_type: selectedServices[0],
           selected_services: selectedServices,
-          input_type: inputType === 'file' ? 'video' : 'link',
-          input_url: inputType === 'link' ? linkInput : null,
+          selected_outputs: outputs,
+          input_type: 'link',
+          input_url: linkInput,
           input_language: language,
-          file_size_mb: fileSizeMB,
+          file_size_mb: 0,
           status: 'processing',
           progress: 0,
         })
@@ -252,22 +287,10 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
 
       if (dbError) throw dbError;
 
-      const apiRequest: any = {
-        file: inputType === 'file' ? selectedFile : undefined,
-        url: inputType === 'link' ? linkInput : undefined,
+      const apiRequest = {
+        url: linkInput,
+        outputs: outputs,
       };
-
-      const uniqueApiFields = new Set<string>();
-      selectedServices.forEach((serviceType) => {
-        const option = serviceOptions.find((s) => s.id === serviceType);
-        if (option?.apiField) {
-          uniqueApiFields.add(option.apiField);
-        }
-      });
-
-      uniqueApiFields.forEach((field) => {
-        apiRequest[field] = true;
-      });
 
       const result = await processMedia(apiRequest, (progress) => {
         setUploadProgress(progress);
@@ -293,13 +316,12 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
         user_id: profile.id,
         service_id: serviceRecord.id,
         service_type: selectedServices[0],
-        file_size_mb: fileSizeMB,
+        file_size_mb: 0,
         cost_credits: selectedServices.length,
       });
 
       await fetchHistory();
 
-      setSelectedFile(null);
       setLinkInput('');
       setSelectedServices([]);
       setUploading(false);
@@ -341,74 +363,20 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
             <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 mb-6">
               <h2 className="text-xl font-bold text-gray-900 mb-4">ورودی</h2>
 
-              <div className="flex gap-4 mb-6">
-                <button
-                  onClick={() => setInputType('file')}
-                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
-                    inputType === 'file'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <Upload className="w-5 h-5 inline ml-2" />
-                  آپلود فایل
-                </button>
-                <button
-                  onClick={() => setInputType('link')}
-                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
-                    inputType === 'link'
-                      ? 'bg-emerald-600 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <LinkIcon className="w-5 h-5 inline ml-2" />
-                  لینک
-                </button>
+              <div>
+                <input
+                  type="url"
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  placeholder="https://example.com/video.mp4"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                  disabled={uploading}
+                />
+                <p className="text-sm text-gray-600 mt-2">
+                  <LinkIcon className="w-4 h-4 inline ml-1" />
+                  لینک ویدیو خود را وارد کنید
+                </p>
               </div>
-
-              {inputType === 'file' ? (
-                <div>
-                  <label className="block w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-emerald-500 transition-colors cursor-pointer">
-                    <input
-                      type="file"
-                      onChange={handleFileSelect}
-                      accept="audio/*,video/*"
-                      className="hidden"
-                      disabled={uploading}
-                    />
-                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    {selectedFile ? (
-                      <div>
-                        <p className="text-gray-900 font-medium">{selectedFile.name}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-gray-700 font-medium mb-1">فایل صوتی یا تصویری خود را انتخاب کنید</p>
-                        <p className="text-sm text-gray-500">
-                          حداکثر {profile?.subscription_type === 'premium' ? '1 گیگابایت' : '100 مگابایت'}
-                        </p>
-                      </div>
-                    )}
-                  </label>
-                </div>
-              ) : (
-                <div>
-                  <input
-                    type="url"
-                    value={linkInput}
-                    onChange={(e) => setLinkInput(e.target.value)}
-                    placeholder="https://example.com/video.mp4"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                    disabled={uploading}
-                  />
-                  <p className="text-sm text-gray-600 mt-2">
-                    لینک فایل صوتی یا تصویری خود را وارد کنید
-                  </p>
-                </div>
-              )}
 
               <div className="mt-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -462,6 +430,9 @@ export function ServicesPage({ onNavigate }: ServicesPageProps) {
 
             <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 mb-4">خدمات مورد نظر</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                خدماتی که می‌خواهید در خروجی دریافت کنید را انتخاب کنید
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 {serviceOptions.map((service) => {
                   const Icon = service.icon;
