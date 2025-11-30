@@ -34,13 +34,21 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
         onNavigate('dashboard');
       }
     } catch (err: any) {
-      setError(
-        err.message === 'Invalid login credentials'
-          ? 'ایمیل یا رمز عبور اشتباه است'
-          : err.message === 'User already registered'
-          ? 'این ایمیل قبلا ثبت شده است'
-          : 'خطایی رخ داده است. لطفا دوباره تلاش کنید'
-      );
+      console.error('Auth error:', err);
+
+      let errorMessage = 'خطایی رخ داده است. لطفا دوباره تلاش کنید';
+
+      if (err.message === 'Invalid login credentials') {
+        errorMessage = 'ایمیل یا رمز عبور اشتباه است';
+      } else if (err.message === 'User already registered') {
+        errorMessage = 'این ایمیل قبلا ثبت شده است';
+      } else if (err.message === 'پروفایل کاربری یافت نشد') {
+        errorMessage = 'حساب کاربری شما کامل نیست. لطفا با پشتیبانی تماس بگیرید';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

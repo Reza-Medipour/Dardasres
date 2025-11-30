@@ -98,12 +98,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) throw error;
+
+    if (data.user) {
+      const profileData = await fetchProfile(data.user.id);
+      if (!profileData) {
+        throw new Error('پروفایل کاربری یافت نشد');
+      }
+      setProfile(profileData);
+    }
   };
 
   const signOut = async () => {
